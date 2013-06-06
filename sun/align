@@ -1,0 +1,74 @@
+#!/usr/bin/perl
+
+=pod
+
+align -- aligns text into colums
+
+Silly script by S^2, Aug 2008
+
+Reads arbitrary text input from standard input, coverts it to tabular 
+text (column-aligned) output.  Processes lines such that fields are 
+aligned horizontally. For numbers, aligns characters to the right side 
+of the column; otherwise aligns left.
+
+The default field delimiter is white space; use -d to specify otherwise.
+
+=cut
+
+use Getopt::Std;
+
+getopt d;
+
+# Main loop
+#
+# convert input lines into a list of lists
+# list will be @lines
+# each element of @lines will be a list named @fields
+
+$delim = ' ';
+$delim = $opt_d if $opt_d;
+
+foreach (<>) {
+  chomp;
+
+  my @fields;
+
+  # break the (input) line into fields; fill the list with those fields
+  if ($opt_d) {
+     @fields = split("$opt_d",$_);
+  } else {
+     @fields = split(' ',$_);
+  }
+
+  $num_fields = $#fields;
+  $max_num_fields = $num_fields if ($num_fields > $max_num_fields);
+  push @lines, \@fields;  # fill this (output) line with the list created previously
+
+  # Go through each field of the line; record the longest length found for each field number
+  for $field_num (0..$num_fields) {
+     # Record the max length of each field, for use when formating (aligning) output lines
+
+     $this_field = $fields[$field_num];
+     $this_len   = length $this_field;
+
+     $max_len[$field_num] = $this_len if $this_len > $max_len[$field_num];
+
+     # Guess best alignment, left or right
+     $prefix[$field_num] = "%-";						# default to LEFT alignment
+     $prefix[$field_num] = "%"  if $fields[$field_num] =~ /^\d+%?$/ ;		# RIGHT align integers
+     $prefix[$field_num] = "%"  if $fields[$field_num] =~ /^\d+\.\d+%?$/ ;	# RIGHT align floats
+  }
+}
+
+# Setup output format based on previously stored max column widths, and right/left alignment determinations
+for $field_num (0..$max_num_fields) { 
+   $format_str .= $prefix[$field_num] . $max_len[$field_num] . "s "; 
+}
+$format_str .= "\n";
+
+# write out the contents
+for $href (@lines) {
+  printf $format_str, @$href;
+}
+
+# end of align script
