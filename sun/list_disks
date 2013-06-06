@@ -1,0 +1,63 @@
+#!/bin/ksh 
+
+get_disk_lines () {
+     format <<-EOF | nawk '/^ *[0-9]+\. / {printf "%s %s\n", $2, $3}' | tr -d '<>'
+EOF
+}
+
+calc_disk_size () {
+
+
+        # compute capacity using method for SATA disks.
+        # VTOC on most disks in a x4500 is different than most Sun servers
+        hd_size=`prtvtoc $dev_path 2> /dev/null |\
+                nawk '
+                        /bytes.sector/    {B_per_sec = $2}
+                        /accessible sec/  {sec = $2}
+                        END               { B = B_per_sec * sec;
+                                           GB = B / 1024 / 1024 / 1024;
+                                           printf "%d\n", GB}
+               '`
+
+        # if computation of disk space = 0, try alternate method...
+        # to parse other VTOC header format
+
+        if [ $hd_size -eq 0 ]; then
+        hd_size=`prtvtoc $dev_path 2> /dev/null |\
+                nawk '
+                         /bytes.sector/     {B_per_sec = $2}
+                         /sectors.track/    {sec_per_trk = $2}
+                         /tracks.cylinder/  {trk_per_cyl = $2}
+                         /[0-9] cylinders$/ {cyl = $2}
+                         END                {B = B_per_sec * sec_per_trk * trk_per_cyl * cyl;
+                                            GB = B / 1024 / 1024 / 1024;
+                                            printf "%d\n", GB}
+                    '`
+        fi
+  printf "$disk $type $hd_size GB\n";
+
+}
+
+IFS='
+'
+
+printf "DEV	TYPE	SIZE\n";
+
+for line in `get_disk_lines`; do
+
+	disk=`echo $line | awk '{print $1}'`;
+	type=`echo $line | awk '{print $2}'`;
+	
+	done='false'
+	for slice in s0 s2 ""; do
+		dev_path=/dev/rdsk/${disk}${slice}
+		prtvtoc $dev_path >/dev/null 2>&1
+        	if [ $? -eq 0 -a $done = 'false' ]; then
+                	calc_disk_size
+                        done='true'
+        	fi
+	done
+done
+
+exit 0
+#
