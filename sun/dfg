@@ -1,0 +1,73 @@
+#!/usr/bin/perl
+
+=pod
+
+Reformats the output of df -k to show megabytes or gigabytes 
+vice kilobytes.  Shows ufs, ext3, zfs and vxfs file system 
+types; others omitted.
+
+If program name is "dfg", output format is in gigabytes,
+if program name is "dfm", output format is in megabytes.
+
+=cut
+
+chomp($OS = `uname -s`);
+if ($OS eq "Linux") {$UFS = "ext3"} else { $UFS = "ufs"}
+
+if (@ARGV) {
+  @fs = `df -k @ARGV`;
+} else {
+  $cmd = "df -k -F $UFS; df -k -F zfs | tail +2; df -k -F vxfs | tail +2";
+  @fs  = `$cmd`;
+}
+
+my $prognam = $0;
+$prognam =~ s|/.*/||;   # simulate "basename" function
+$prognam =~ s|^\.||;    # simulate "basename" function
+$prognam =~ s|^/||;     # simulate "basename" function
+
+# convert from kbytes to mbytes (or gbytes)
+if ($prognam eq "dfm") {
+  $divisor = 1024;
+  $size_word = "mbytes";
+  @keys = qw(Filesystem mbytes used avail capacity Mounted);
+} elsif ($prognam eq "dfg") {
+  $divisor = 1024*1024;
+  $size_word = "gbytes";
+  @keys = qw(Filesystem gbytes used avail capacity Mounted);
+}
+
+# load up the df -k output into a hash (actually a list of hashes)
+for (@fs) {
+  chomp;
+  my %fields;
+  s/kbytes/$size_word/ if /^Filesystem/;
+  @fields{@keys} = split ' ';  	# fill the fields hash with elements from the input line
+
+  $tot_sz    += $fields{$size_word};	# accumulate column totals
+  $tot_used  += $fields{used};
+  $tot_avail += $fields{avail};
+
+  # for each data line, reformat the number fields with new units (M or G, as appropriate)
+  unless (/^Filesystem/) {
+     for $key ($size_word,"used","avail") {
+        $fields{$key} = sprintf("%.1f",$fields{$key}/$divisor);
+     }
+  }
+  push @lines, \%fields;
+}
+
+# write out the contents of each hash in the list
+for $href (@lines) {
+  $line = sprintf "@$href{@keys}\n";
+  push @out, $line;
+}
+
+$line = sprintf "%s %.1f %.1f %.1f\n", "Grand_Totals", int($tot_sz/$divisor+.5), int($tot_used/$divisor+.5), int($tot_avail/$divisor+.5);
+push @out, $line;
+
+for (@out) { printf ; }
+
+exit 0;
+# fini
+
